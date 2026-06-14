@@ -22,12 +22,17 @@
 //! - [`shard_embedding`] — `ShardEmbedding`, JL random orthogonal projection
 //!   for reducing high-dim KG embeddings to compact K/V shards for mid-layer
 //!   injection. Deterministic (BLAKE3-seeded Box-Muller + Gram-Schmidt).
+//! - [`domain_latent`] — `DomainLatent`, KG-augmented decode step that
+//!   injects KG-grounded candidates at a configured decode midpoint (the
+//!   modelless analog of "mid-layer K/V injection").
 
+pub mod domain_latent;
 pub mod in_memory;
 pub mod projection;
 pub mod schema_centroid;
 pub mod shard_embedding;
 
+pub use domain_latent::DomainLatent;
 pub use in_memory::InMemoryKgStore;
 pub use schema_centroid::SchemaCentroid;
 pub use shard_embedding::ShardEmbedding;
