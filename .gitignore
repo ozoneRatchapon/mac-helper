@@ -1,0 +1,12 @@
+# Private working files (life plan, finance, issue tracking)
+.plans/
+.issues/
+
+# Local backups (machine-specific)
+backups/
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
