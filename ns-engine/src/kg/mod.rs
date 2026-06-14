@@ -13,10 +13,16 @@
 //!
 //! # Submodules
 //!
+//! - [`projection`] — shared deterministic BLAKE3 token→vector projection.
+//!   Single source of truth for all KG embeddings (no learned weights).
 //! - [`in_memory`] — `InMemoryKgStore`, a HashMap-indexed concrete
-//!   [`KgStore`](crate::traits::KgStore) with a deterministic BLAKE3-seeded
-//!   latent projection (no learned weights)
+//!   [`KgStore`](crate::traits::KgStore) with role-scoped triple embeddings.
+//! - [`schema_centroid`] — `SchemaCentroid`, per-class embedding centroids
+//!   for structured entity initialization (grounded init, not random noise).
 
 pub mod in_memory;
+pub mod projection;
+pub mod schema_centroid;
 
 pub use in_memory::InMemoryKgStore;
+pub use schema_centroid::SchemaCentroid;

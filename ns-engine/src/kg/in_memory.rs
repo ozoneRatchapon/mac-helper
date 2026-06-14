@@ -25,8 +25,7 @@
 
 use std::collections::HashMap;
 
-use blake3::Hasher;
-
+use crate::kg::projection::token_vector;
 use crate::traits::KgStore;
 use crate::types::{KgTriple, TokenId};
 
@@ -151,21 +150,17 @@ impl KgStore for InMemoryKgStore {
             return Vec::new();
         }
         let mut out = Vec::with_capacity(total_dim);
-        out.extend(token_subvector(
+        out.extend(token_vector(
             triple.subject,
             self.role_dim,
-            RoleTag::Subject,
+            SUBJECT_SEED_TAG,
         ));
-        out.extend(token_subvector(
+        out.extend(token_vector(
             triple.predicate,
             self.role_dim,
-            RoleTag::Predicate,
+            PREDICATE_SEED_TAG,
         ));
-        out.extend(token_subvector(
-            triple.object,
-            self.role_dim,
-            RoleTag::Object,
-        ));
+        out.extend(token_vector(triple.object, self.role_dim, OBJECT_SEED_TAG));
         out
     }
 
@@ -174,74 +169,22 @@ impl KgStore for InMemoryKgStore {
     }
 }
 
-// ── Projection helpers ─────────────────────────────────────────
+// ── Role seed tags ─────────────────────────────────────────────
+//
+// The shared `token_vector` projection (see `crate::kg::projection`) is
+// namespaced by a seed tag. The three tags below keep the subject,
+// predicate, and object thirds of a triple embedding in statistically
+// independent coordinate subspaces, so role confusion is impossible even
+// if a downstream consumer sums the thirds together.
 
-/// Role tag woven into the BLAKE3 seed so that the same token ID produces
-/// different sub-vectors depending on whether it appears as subject,
-/// predicate, or object. This is belt-and-suspenders on top of the
-/// positional concat: even if a downstream consumer sums the thirds
-/// together, role confusion is still prevented.
-#[derive(Clone, Copy)]
-enum RoleTag {
-    Subject,
-    Predicate,
-    Object,
-}
+/// Seed tag for the subject third of a triple embedding.
+const SUBJECT_SEED_TAG: &[u8] = b"s";
 
-impl RoleTag {
-    /// Byte signature mixed into the hash seed.
-    const fn bytes(self) -> &'static [u8] {
-        match self {
-            RoleTag::Subject => b"s",
-            RoleTag::Predicate => b"p",
-            RoleTag::Object => b"o",
-        }
-    }
-}
+/// Seed tag for the predicate third of a triple embedding.
+const PREDICATE_SEED_TAG: &[u8] = b"p";
 
-/// Deterministic latent sub-vector for a `token` in a given `role`.
-///
-/// BLAKE3 counter-mode expansion: each 32-byte hash block (seeded by
-/// `role || token || counter`) yields 8 floats; we accumulate blocks until
-/// `dim` floats are available, then truncate to exact length.
-///
-/// Each 4-byte lane is interpreted as a little-endian `u32`, normalized to
-/// `[-1.0, 1.0]` via `u / u32::MAX * 2 - 1`. This bounds the embedding
-/// coordinates to a unit-scale range suitable for K/V injection.
-///
-/// Determinism: identical `(token, dim, role)` always produces the same
-/// vector, across calls and across process restarts. There is no RNG state.
-fn token_subvector(token: TokenId, dim: usize, role: RoleTag) -> Vec<f32> {
-    if dim == 0 {
-        return Vec::new();
-    }
-    let needed_bytes = dim.saturating_mul(4);
-    let mut bytes = Vec::with_capacity(needed_bytes);
-    let mut counter: u64 = 0;
-    while bytes.len() < needed_bytes {
-        let mut hasher = Hasher::new();
-        hasher.update(role.bytes());
-        hasher.update(&token.to_le_bytes());
-        hasher.update(&counter.to_le_bytes());
-        bytes.extend_from_slice(hasher.finalize().as_bytes());
-        counter = match counter.checked_add(1) {
-            Some(next) => next,
-            // u64 overflow at ~1.8e19 blocks (≈ 5.9e20 floats). Infeasible
-            // to reach; return what we have rather than wrap.
-            None => break,
-        };
-    }
-    bytes.truncate(needed_bytes);
-    bytes
-        .chunks_exact(4)
-        .map(|chunk| {
-            // chunk is guaranteed exactly 4 bytes by chunks_exact.
-            let raw = [chunk[0], chunk[1], chunk[2], chunk[3]];
-            let u = u32::from_le_bytes(raw);
-            (u as f32 / u32::MAX as f32) * 2.0 - 1.0
-        })
-        .collect()
-}
+/// Seed tag for the object third of a triple embedding.
+const OBJECT_SEED_TAG: &[u8] = b"o";
 
 // ── Tests ──────────────────────────────────────────────────────
 
