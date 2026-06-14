@@ -392,7 +392,39 @@ if [ "$STALE_AGENTS" -eq 0 ]; then
   ok "No stale LaunchAgents"
 fi
 
-# ── 10. CLI Tools ──
+# ── 10. Login Items ──
+# Catches the root cause of sleep leaks (e.g. LINE auto-starting and holding
+# 46 PreventUserIdleSystemSleep assertions). Best run interactively — the
+# weekly LaunchAgent may report 'none readable' if bash lacks System Events
+# automation permission.
+
+header "Login Items"
+
+LOGIN_ITEMS=$(osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null)
+
+if [ -z "$LOGIN_ITEMS" ]; then
+  ok "No login items (or none readable)"
+else
+  items_normalized=$(echo "$LOGIN_ITEMS" | tr ',' '\n' | sed 's/^ *//;s/ *$//')
+  item_count=$(echo "$items_normalized" | grep -c '.')
+
+  echo "  ${item_count} login item(s):"
+  echo "$items_normalized" | while read item; do
+    [ -z "$item" ] && continue
+    echo "    • ${item}"
+  done
+
+  # Flag known leak-prone apps (exact match)
+  if echo "$items_normalized" | grep -qx "LINE"; then
+    warn "LINE in Login Items — known sleep-leak culprit (46 assertions). Remove via System Settings → General → Login Items."
+  fi
+
+  if [ "$item_count" -gt 5 ]; then
+    warn "${item_count} login items — many auto-start apps slow boot time"
+  fi
+fi
+
+# ── 11. CLI Tools ──
 
 header "CLI Tools (Rust alternatives)"
 
@@ -439,7 +471,7 @@ if [ "$WRONG_ARCH" -eq 0 ] && [ "$INSTALLED_MODERN" -gt 0 ]; then
   ok "All installed tools are native $(uname -m)"
 fi
 
-# ── 11. PATH Issues ──
+# ── 12. PATH Issues ──
 
 header "PATH Health"
 
@@ -473,7 +505,7 @@ if [ "$(uname -m)" = "arm64" ]; then
   done
 fi
 
-# ── 12. Downloads Cleanup ──
+# ── 13. Downloads Cleanup ──
 
 header "Downloads Cleanup"
 
