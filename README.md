@@ -179,10 +179,10 @@ xattr $(which fd bat eza rg)
 
 ```bash
 # Audit your Mac (safe, read-only)
-curl -s https://raw.githubusercontent.com/<you>/mac-helper/main/mac-audit.sh | bash
+curl -s https://raw.githubusercontent.com/ozoneRatchapon/mac-helper/main/mac-audit.sh | bash
 
 # Or clone and run
-git clone https://github.com/<you>/mac-helper.git
+git clone https://github.com/ozoneRatchapon/mac-helper.git
 cd mac-helper
 ./mac-audit.sh
 ```
