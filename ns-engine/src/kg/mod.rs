@@ -19,10 +19,15 @@
 //!   [`KgStore`](crate::traits::KgStore) with role-scoped triple embeddings.
 //! - [`schema_centroid`] — `SchemaCentroid`, per-class embedding centroids
 //!   for structured entity initialization (grounded init, not random noise).
+//! - [`shard_embedding`] — `ShardEmbedding`, JL random orthogonal projection
+//!   for reducing high-dim KG embeddings to compact K/V shards for mid-layer
+//!   injection. Deterministic (BLAKE3-seeded Box-Muller + Gram-Schmidt).
 
 pub mod in_memory;
 pub mod projection;
 pub mod schema_centroid;
+pub mod shard_embedding;
 
 pub use in_memory::InMemoryKgStore;
 pub use schema_centroid::SchemaCentroid;
+pub use shard_embedding::ShardEmbedding;

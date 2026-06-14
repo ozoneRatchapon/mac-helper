@@ -16,7 +16,7 @@ pub mod types;
 
 pub use bandit::{BanditPolicy, BanditPruner};
 pub use decode::speculative_decode;
-pub use kg::{InMemoryKgStore, SchemaCentroid};
+pub use kg::{InMemoryKgStore, SchemaCentroid, ShardEmbedding};
 pub use traits::{ConstraintPruner, DraftModel, KgStore, ScreeningPruner};
 pub use types::{ArmId, DecodeConfig, DecodeResult, KgTriple, Logits, TokenId};
 
