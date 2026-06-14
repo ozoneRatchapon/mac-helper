@@ -9,14 +9,16 @@
 pub mod bandit;
 pub mod decode;
 pub mod draft;
+pub mod kg;
 pub mod pruners;
 pub mod traits;
 pub mod types;
 
 pub use bandit::{BanditPolicy, BanditPruner};
 pub use decode::speculative_decode;
-pub use traits::{ConstraintPruner, DraftModel, ScreeningPruner};
-pub use types::{ArmId, DecodeConfig, DecodeResult, Logits, TokenId};
+pub use kg::InMemoryKgStore;
+pub use traits::{ConstraintPruner, DraftModel, KgStore, ScreeningPruner};
+pub use types::{ArmId, DecodeConfig, DecodeResult, KgTriple, Logits, TokenId};
 
 // Phase 3: WASM hot-swap pruners (behind `wasm-pruner` feature).
 #[cfg(feature = "wasm-pruner")]

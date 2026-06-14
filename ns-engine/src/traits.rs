@@ -7,7 +7,7 @@
 //! The "modelless" thesis: intelligence lives in the symbolic pruner
 //! layer, not in model weights. The model only drafts; the pruner decides.
 
-use crate::types::{ArmId, Logits, TokenId};
+use crate::types::{ArmId, KgTriple, Logits, TokenId};
 
 // ── ConstraintPruner ───────────────────────────────────────────
 
@@ -184,6 +184,51 @@ pub trait DraftModel: Send + Sync {
     /// likely. Values need not be normalized log-probabilities; any ordering
     /// signal works because the decode loop only uses relative ranking.
     fn log_probs(&self, context: &[TokenId]) -> Logits;
+}
+
+// ── KgStore ────────────────────────────────────────────────────
+
+/// Knowledge-graph store: structured, verifiable memory layer.
+///
+/// Where [`ConstraintPruner`] owns syntactic validity and [`DraftModel`]
+/// owns fluency, the `KgStore` owns SEMANTIC GROUNDING. Facts are stored as
+/// discrete triples ([`KgTriple`]) and recalled verbatim — no hallucinated
+/// recall, no embedding drift.
+///
+/// This is the "needle in a haystack" (NIAH) substrate: a stored fact
+/// `(s, p, o)` is retrieved exactly by `lookup(s, p) = [o, ...]`, with
+/// 100% precision. The continuous projection ([`embed`](Self::embed)) feeds
+/// the mid-layer K/V injection planned for the `domain_latent` mid-layer
+/// (Phase 4).
+///
+/// Ownership boundary: KgStore owns STRUCTURED FACTUAL RECALL. It does not
+/// decide fluency (draft model) or syntactic validity (pruner); it grounds
+/// generation in discrete, checkable facts.
+pub trait KgStore: Send + Sync {
+    /// Retrieve all object tokens matching `(subject, predicate)`.
+    ///
+    /// Returns every known `o` such that `(subject, predicate, o)` is a
+    /// stored fact. An empty result means no stored fact for that
+    /// `(subject, predicate)` pair — absent, not "unknown".
+    ///
+    /// Order is implementation-defined; the default in-memory store
+    /// preserves insertion order. Callers requiring sorted output should
+    /// sort the result themselves.
+    fn lookup(&self, subject: TokenId, predicate: TokenId) -> Vec<TokenId>;
+
+    /// Project a triple into a deterministic latent vector.
+    ///
+    /// The KG Latent projection maps the discrete triple into a continuous
+    /// space of dimension [`embed_dim`](Self::embed_dim), suitable for
+    /// mid-layer K/V injection. Deterministic: same triple → same vector,
+    /// across calls and across runs (no learned weights, no RNG).
+    fn embed(&self, triple: KgTriple) -> Vec<f32>;
+
+    /// Dimensionality of vectors produced by [`embed`](Self::embed).
+    ///
+    /// Stable across calls for a given store instance. Consumers allocate
+    /// target buffers of this size before calling `embed`.
+    fn embed_dim(&self) -> usize;
 }
 
 // ── Tests ──────────────────────────────────────────────────────
