@@ -24,8 +24,17 @@
 //!   deposit lifecycle (create → deposit → check-in → settle → close) as
 //!   discrete, deterministic transition rules. Demonstrates the modelless
 //!   thesis in a real production domain.
+//!
+//! # Phase 5 additions
+//!
+//! - [`JsonSchemaPruner`] — structural JSON prefix-validity pruner. Tracks
+//!   container nesting, string state (escapes, unicode), number grammar,
+//!   keyword prefixes, and structural expectations (colons, commas, close
+//!   brackets) via an incremental [`JsonState`](json_schema::JsonState)
+//!   state machine.
 
 pub mod escrow;
+pub mod json_schema;
 pub mod ngram_screen;
 pub mod no_pruner;
 pub mod regex;
@@ -41,6 +50,9 @@ pub use escrow::{
     ACTION_CLOSE_DEPOSIT, ACTION_CLOSE_EVENT, ACTION_CREATE_EVENT, ACTION_DEACTIVATE_EVENT,
     ACTION_DEPOSIT, ACTION_INTROSPECTION, ACTION_MARK_CHECKED_IN, ACTION_REFUND,
     ACTION_ROLLOVER_DEPOSIT, ESCROW_ARM_ID, ESCROW_LABEL,
+};
+pub use json_schema::{
+    JsonError, JsonSchemaPruner, JsonState, JSON_SCHEMA_ARM_ID, JSON_SCHEMA_LABEL,
 };
 pub use ngram_screen::{NgramScreeningPruner, NGRAM_SCREEN_ARM_ID, NGRAM_SCREEN_LABEL};
 pub use no_pruner::{NoPruner, NO_PRUNER_ARM_ID, NO_PRUNER_LABEL};
