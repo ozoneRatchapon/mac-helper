@@ -32,7 +32,14 @@
 //!   keyword prefixes, and structural expectations (colons, commas, close
 //!   brackets) via an incremental [`JsonState`](json_schema::JsonState)
 //!   state machine.
+//! - [`BomberActionPruner`] — Bomberman domain legality pruner. Mirrors a
+//!   full [`BomberState`] forward model (grid, bombs, chain reactions,
+//!   destructible blocks) via stateless replay. First Phase 5 domain to ship
+//!   BOTH a [`GameState`](crate::game::GameState) impl AND a matching
+//!   [`ConstraintPruner`]. Graded screen scores actions by exit-distance
+//!   reduction and bomb-placement utility.
 
+pub mod bomber;
 pub mod escrow;
 pub mod json_schema;
 pub mod ngram_screen;
@@ -45,6 +52,11 @@ pub mod hot_swap;
 #[cfg(feature = "wasm-pruner")]
 pub mod wasm_pruner;
 
+pub use bomber::{
+    Bomb, BomberActionPruner, BomberConfig, BomberConfigError, BomberState, Cell, ACTION_MOVE_E,
+    ACTION_MOVE_N, ACTION_MOVE_S, ACTION_MOVE_W, ACTION_PLACE_BOMB, ACTION_WAIT, BOMBER_ARM_ID,
+    BOMBER_LABEL, BOMBER_VOCAB,
+};
 pub use escrow::{
     BethereEscrowPruner, ClockPhase, EscrowConfig, EscrowState, ACTION_CLAIM_FORFEITED,
     ACTION_CLOSE_DEPOSIT, ACTION_CLOSE_EVENT, ACTION_CREATE_EVENT, ACTION_DEACTIVATE_EVENT,

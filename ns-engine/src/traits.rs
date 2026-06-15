@@ -116,6 +116,7 @@ pub trait ConstraintPruner: Send + Sync {
 /// - [`NgramScreeningPruner`](crate::pruners::NgramScreeningPruner) — n-gram prob as score
 /// - [`RegexPruner`](crate::pruners::RegexPruner) — regex prefix validity
 /// - [`JsonSchemaPruner`](crate::pruners::JsonSchemaPruner) — JSON structural prefix validity
+/// - [`BomberActionPruner`](crate::pruners::BomberActionPruner) — Bomberman action legality (graded heuristic)
 pub trait ScreeningPruner: ConstraintPruner {
     /// Stable identifier for this arm within a [`BanditPruner`](crate::bandit::BanditPruner).
     ///
