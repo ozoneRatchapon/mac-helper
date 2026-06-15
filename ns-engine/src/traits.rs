@@ -117,6 +117,7 @@ pub trait ConstraintPruner: Send + Sync {
 /// - [`RegexPruner`](crate::pruners::RegexPruner) — regex prefix validity
 /// - [`JsonSchemaPruner`](crate::pruners::JsonSchemaPruner) — JSON structural prefix validity
 /// - [`BomberActionPruner`](crate::pruners::BomberActionPruner) — Bomberman action legality (graded heuristic)
+/// - [`QuestActionPruner`](crate::pruners::QuestActionPruner) — RPG quest-tree action legality (graded heuristic)
 pub trait ScreeningPruner: ConstraintPruner {
     /// Stable identifier for this arm within a [`BanditPruner`](crate::bandit::BanditPruner).
     ///

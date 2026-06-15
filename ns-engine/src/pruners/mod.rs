@@ -38,12 +38,19 @@
 //!   BOTH a [`GameState`](crate::game::GameState) impl AND a matching
 //!   [`ConstraintPruner`]. Graded screen scores actions by exit-distance
 //!   reduction and bomb-placement utility.
+//! - [`QuestActionPruner`] — RPG quest-tree legality pruner. Mirrors a
+//!   [`QuestState`] forward model (prerequisite DAG, accept/complete/fail
+//!   lifecycle, goal set) via stateless replay. Second Phase 5 domain to ship
+//!   BOTH a [`GameState`](crate::game::GameState) impl AND a matching
+//!   [`ConstraintPruner`]. Graded screen scores goal-path quest completion
+//!   higher than off-path distraction; failing is weighted low.
 
 pub mod bomber;
 pub mod escrow;
 pub mod json_schema;
 pub mod ngram_screen;
 pub mod no_pruner;
+pub mod quest;
 pub mod regex;
 pub mod sudoku;
 
@@ -68,6 +75,11 @@ pub use json_schema::{
 };
 pub use ngram_screen::{NgramScreeningPruner, NGRAM_SCREEN_ARM_ID, NGRAM_SCREEN_LABEL};
 pub use no_pruner::{NoPruner, NO_PRUNER_ARM_ID, NO_PRUNER_LABEL};
+pub use quest::{
+    decode_quest_action, encode_quest_action, QuestActionPruner, QuestConfig, QuestConfigError,
+    QuestState, QuestStatus, ACTIONS_PER_QUEST, QUEST_ACTION_ACCEPT, QUEST_ACTION_COMPLETE,
+    QUEST_ACTION_FAIL, QUEST_ARM_ID, QUEST_LABEL,
+};
 pub use regex::{
     RegexPruner, RegexPrunerError, MAX_DEFAULT_TOKEN as REGEX_MAX_DEFAULT_TOKEN, REGEX_ARM_ID,
     REGEX_LABEL,
