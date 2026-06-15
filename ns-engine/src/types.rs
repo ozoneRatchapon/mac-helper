@@ -70,6 +70,68 @@ impl DecodeResult {
     }
 }
 
+// ── Speculative generate result ────────────────────────────────
+
+/// Result of a speculative generate run over a
+/// [`GameState`](crate::game::GameState).
+///
+/// The Phase 5 analog of [`DecodeResult`]: where decode emits a token
+/// sequence under a [`ConstraintPruner`](crate::traits::ConstraintPruner),
+/// generate emits an ACTION TRAJECTORY by advancing a forward model.
+/// The action trajectory doubles as the "parent_tokens" context for the
+/// draft model on the next step, so the same BLAKE3 audit hasher applies.
+#[derive(Clone, Debug)]
+pub struct GenerateResult {
+    /// The accepted action trajectory (TokenIds applied to the state).
+    ///
+    /// Doubles as the `parent_tokens` context fed back into the draft model
+    /// at the next depth, mirroring `DecodeResult::tokens`.
+    pub actions: Vec<TokenId>,
+    /// Whether the trajectory reached a terminal state (the goal or a dead
+    /// end). `false` means the run stopped on a budget limit, not a real
+    /// terminal — the caller cannot treat the result as a completed game.
+    pub terminal: bool,
+    /// Whether the trajectory reached a SUCCESS terminal (the domain's
+    /// objective), as opposed to a non-goal terminal (dead-end) or a budget
+    /// limit.
+    ///
+    /// Always implies `terminal == true`. Distinct from `terminal` because a
+    /// non-goal terminal (e.g., a stuck state in a planning problem) is still
+    /// terminal but not a win. The generate loop backtracks from non-goal
+    /// terminals and stops at goal terminals.
+    pub goal: bool,
+    /// Total reward accumulated along the trajectory.
+    ///
+    /// Computed as the sum of `GameState::reward()` over every state
+    /// visited on the final accepted path (initial → terminal). Supports
+    /// both terminal-only scoring (reward=0 except at goal) and dense
+    /// shaping (incremental per-step reward).
+    pub reward: f32,
+    /// Number of exploration attempts (forward steps + backtracks).
+    ///
+    /// Matches `DecodeResult::attempts` semantics: every candidate
+    /// evaluation counts once, whether accepted or rejected.
+    pub attempts: u64,
+    /// BLAKE3 hash of the action trajectory for audit/reproducibility.
+    ///
+    /// Same hasher as `DecodeResult::hash` over the same `Vec<TokenId>`
+    /// shape, so a decode run and a generate run with identical action /
+    /// token sequences produce identical audit hashes.
+    pub hash: [u8; 32],
+}
+
+impl GenerateResult {
+    /// Compute BLAKE3 hash from an action slice.
+    ///
+    /// Action trajectories and token sequences share the `Vec<TokenId>`
+    /// shape, so this delegates to [`DecodeResult::hash_tokens`] — a
+    /// decode run and a generate run with identical content hash
+    /// identically.
+    pub fn hash_actions(actions: &[TokenId]) -> [u8; 32] {
+        DecodeResult::hash_tokens(actions)
+    }
+}
+
 // ── Knowledge-graph triple ─────────────────────────────────────
 
 /// A knowledge-graph triple: `(subject, predicate, object)`.

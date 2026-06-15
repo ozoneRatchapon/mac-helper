@@ -163,7 +163,7 @@ fn decode_with_backtrack(
 ///
 /// Stable sort preserves index order for tied logits, giving deterministic
 /// candidate ordering when the draft model is uniform.
-fn top_k_indices(logits: &[f32], k: usize) -> Vec<TokenId> {
+pub(crate) fn top_k_indices(logits: &[f32], k: usize) -> Vec<TokenId> {
     let k = k.min(logits.len());
     if k == 0 {
         return Vec::new();
@@ -189,7 +189,7 @@ fn top_k_indices(logits: &[f32], k: usize) -> Vec<TokenId> {
 ///
 /// Preserves the input order (descending logit), so the first element of
 /// the result is the best valid candidate.
-fn valid_candidates(
+pub(crate) fn valid_candidates(
     pruner: &dyn ConstraintPruner,
     depth: usize,
     parent_tokens: &[TokenId],
@@ -219,7 +219,7 @@ fn valid_candidates(
 ///
 /// For non-uniform models, ties are rare, so this is effectively a no-op
 /// while still providing the same deterministic seed-based guarantee.
-fn shuffle_tied_groups(candidates: &mut [TokenId], logits: &[f32], rng: &mut Rng) {
+pub(crate) fn shuffle_tied_groups(candidates: &mut [TokenId], logits: &[f32], rng: &mut Rng) {
     if candidates.len() <= 1 {
         return;
     }
