@@ -340,13 +340,17 @@ where
 
         match valid.first() {
             Some(&action) => {
-                pruner.propagate(depth, action, actions);
                 let next = state_stack
                     .last()
                     .expect("state stack non-empty")
                     .step(action);
                 actions.push(action);
                 state_stack.push(next);
+                // Propagate AFTER the push: `ConstraintPruner::propagate`
+                // requires the post-commit slice (len == depth + 1), matching
+                // `speculative_decode`. Passing the pre-push slice here made
+                // stateful pruners key differently in the two loops.
+                pruner.propagate(depth, action, actions);
             }
             None => return (false, state_stack),
         }
@@ -418,13 +422,14 @@ where
 
         match untried[depth].pop() {
             Some(action) => {
-                pruner.propagate(depth, action, actions);
                 let next = state_stack
                     .last()
                     .expect("state stack non-empty")
                     .step(action);
                 actions.push(action);
                 state_stack.push(next);
+                // Post-commit slice, matching decode.rs — see the greedy path.
+                pruner.propagate(depth, action, actions);
             }
             None => {
                 // Dead-end at this depth — backtrack.

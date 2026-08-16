@@ -78,6 +78,19 @@ pub trait ConstraintPruner: Send + Sync {
     /// bitset in Sudoku). Stateless pruners derive everything from
     /// `parent_tokens` and leave this as a no-op.
     ///
+    /// # Slice contract (both loops)
+    ///
+    /// `parent_tokens` is the sequence **after** `token` was pushed, so
+    /// `parent_tokens.len() == depth + 1` and `parent_tokens.last() == Some(&token)`.
+    /// The prefix that [`is_valid`](Self::is_valid) / [`batch_is_valid`](Self::batch_is_valid)
+    /// saw at this depth is `&parent_tokens[..depth]`. Implementors that key
+    /// on the pre-commit context (e.g. the bandit's pattern hash) MUST slice
+    /// to `..depth` rather than hashing the whole argument, or they will key
+    /// differently from the read path.
+    ///
+    /// [`on_backtrack`](Self::on_backtrack) mirrors this: it receives the
+    /// sequence **after** the pop, so `parent_tokens.len() == depth`.
+    ///
     /// Default: no-op (stateless derivation).
     fn propagate(&mut self, _depth: usize, _token: TokenId, _parent_tokens: &[TokenId]) {}
 
