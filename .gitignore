@@ -10,3 +10,9 @@ backups/
 ._*
 .Spotlight-V100
 .Trashes
+
+# Scratch artifacts and repros from agent sessions (not shipped)
+.logs/
+
+# katgpt-rs is a separate git repository, cloned here for local work
+katgpt-rs/
