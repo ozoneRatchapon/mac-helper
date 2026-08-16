@@ -179,7 +179,28 @@ decoy domain in **17 attempts, zero backtracks**, while uniform DFS took 2,682 a
 same run (tie-shuffle variance) — with correct semantics the LLM draft decisively beats
 uninformed search on strategy-heavy domains.
 
-## Phase 4 — fully-local RAG (03:0x)
+## Follow-up (morning) — MLX variants vs current GGUF builds
+
+User asked whether `qwen3.8:27b-mlx` / `gemma4:31b-mlx` beat the current builds. Same battery,
+server restarted with `OLLAMA_FLASH_ATTENTION=1 OLLAMA_KV_CACHE_TYPE=q8_0` (≈ speed-neutral for
+generation, halves KV memory — kept).
+
+| | qwen3.8 GGUF | qwen3.8:27b-mlx | gemma4:26b GGUF | gemma4:31b-mlx |
+|---|---|---|---|---|
+| Generation | 25–29 tok/s | **45 tok/s** | **68–75 tok/s** | 35–37 tok/s |
+| Prompt eval (8K–16K ctx) | 306 tok/s | 105 tok/s | **1071 tok/s** | 84 tok/s |
+| Quality battery (code/math/JSON/tools) | pass | pass | pass | pass |
+| Long-context needle | pass | pass | pass | pass (99 s for 8K) |
+
+**Verdict:**
+- `gemma4:31b-mlx` — strictly worse than gemma4:26b here: half the generation speed, **13× slower
+  prompt ingestion** (the 39K-token needle test timed out at 10 min vs 22 s on GGUF). Skip it.
+- `qwen3.8:27b-mlx` — real +60% generation over qwen GGUF, but ~3× slower prompt processing;
+  fine for short-prompt chat, wrong for RAG/agent contexts.
+- **`gemma4:26b` (GGUF) remains the daily driver** — it beats every variant tested on both axes.
+- Ollama's MLX runtime also handled `num_ctx` differently (processed the full ~39K-token prompt
+  where GGUF windowed to ~16K) and its prefill speed looks immature relative to upstream mlx-lm;
+  worth re-testing in a few Ollama releases.
 
 `ollama-lab rag "<question>" [model]` — walks `~/mac helper` for markdown (skipping target/,
 dot-dirs), paragraph-aligned ~1200-char chunks, batch-embeds with nomic-embed-text, cosine top-4,
