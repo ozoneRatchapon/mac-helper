@@ -274,18 +274,21 @@ impl ConstraintPruner for BanditPruner {
     }
 
     fn propagate(&mut self, depth: usize, token: TokenId, parent_tokens: &[TokenId]) {
-        let arm = {
-            // Re-derive the same arm the (immutable) batch_is_valid picked.
-            // Log state is identical between batch_is_valid and propagate.
-            let pat = pattern_key(depth, parent_tokens);
-            self.policy.select(&pat, &self.log, self.arms.len())
-        };
+        // Re-derive the same arm the (immutable) batch_is_valid picked. It
+        // keyed on the PREFIX, so the pattern must be built from the prefix
+        // here too: `speculative_decode` passes the post-push token vec (the
+        // committed token included), and hashing that yields a different,
+        // usually unseen pattern — which selects the wrong arm and misdirects
+        // the reward, the committed[] blame record, and this propagate.
+        // `prefix_at_depth` also makes this correct under
+        // `speculative_generate`, which passes the pre-push slice.
+        let prefix = Self::prefix_at_depth(depth, parent_tokens);
+        let pat = pattern_key(depth, prefix);
+        let arm = self.policy.select(&pat, &self.log, self.arms.len());
 
         // Compute positive reward = the chosen arm's screen score for this
         // token. Different arms have different screen functions, so the bandit
         // learns which arm "liked" the accepted token more.
-        let prefix = Self::prefix_at_depth(depth, parent_tokens);
-        let pat = pattern_key(depth, prefix);
         let reward = self.arms[arm].screen(depth, token, prefix) as f64;
 
         self.log.observe(&pat, arm, reward);
