@@ -202,6 +202,32 @@ generation, halves KV memory — kept).
   where GGUF windowed to ~16K) and its prefill speed looks immature relative to upstream mlx-lm;
   worth re-testing in a few Ollama releases.
 
+## Follow-up (morning) — speculative decoding experiment (llama.cpp)
+
+Goal: 2× generation via draft-model speculation on qwen3.8:27b, using the GGUF blobs already in
+`~/.ollama/models`.
+
+- **Draft-model path blocked:** qwen3.8 uses a new 248,320-token vocab; qwen3:0.6b has 151,936.
+  llama.cpp requires near-identical vocabs, and no small qwen3.8-family model exists yet. Revisit
+  when Alibaba ships a qwen3.8 mini.
+- **Model-free n-gram speculation** (llama.cpp b10360 `--spec-type`, via llama-server) on an
+  echo-heavy code-rewrite task, temp 0, n=300:
+
+| Mode | gen tok/s | drafted → accepted |
+|---|---|---|
+| none (baseline) | 15.5 | — |
+| ngram-simple | **18.5 (+19%)** | 144 → 66 (46%) |
+| ngram-map-k | 18.5 (+19%) | 144 → 66 |
+| ngram-mod | 17.2 | 128 → 43 |
+| ngram-cache | 12.9 (slower!) | 194 → 97 |
+
+- **Caveat that decides everything:** brew's llama.cpp generates at only 15.5 tok/s on the same
+  blob where Ollama does 26 — so even +19% (18.5) loses to plain Ollama today. The speculation
+  mechanism is validated (46% acceptance on edit-style output), but it only pays once the baseline
+  runtime matches Ollama (source-built llama.cpp with better Metal tuning, or Ollama exposing
+  speculation itself). Also note llama-cli b10360 ignores `-no-cnv` (use `llama-completion`), and
+  `llama-speculative` requires `-md` even for ngram modes (use `llama-server`).
+
 `ollama-lab rag "<question>" [model]` — walks `~/mac helper` for markdown (skipping target/,
 dot-dirs), paragraph-aligned ~1200-char chunks, batch-embeds with nomic-embed-text, cosine top-4,
 answers with a local chat model constrained to the retrieved context.
