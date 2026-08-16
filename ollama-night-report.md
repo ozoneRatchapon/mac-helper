@@ -1,0 +1,199 @@
+# Ollama Overnight Report — 2026-08-16
+
+Machine: MacBook Pro M5 Pro, 48 GB RAM. Ollama 0.32.13, server on 127.0.0.1:11434 (localhost-only).
+All inference in this report is fully local.
+
+## Morning TL;DR (finished ~03:45)
+
+1. **All 4 planned phases complete** + bonus experiments. Everything ran locally; zero cloud LLM calls.
+2. **Model picks:** `gemma4:26b` as daily driver (75 tok/s gen, 1104 tok/s prompt, aced every probe);
+   `qwen3-coder:30b` for coding speed (90 tok/s — but it wrote a wrong test assertion once);
+   `qwen3.8:27b` for multimodal/thinking; avoid `gpt-oss:20b` for structured output (format=json fail).
+   Zed is wired to qwen3.8 via the Ollama provider — consider adding gemma4:26b there too.
+3. **⭐ Found and FIXED a real ns-engine bug** (fix user-approved in the morning): backtrack mode
+   explored draft candidates in *inverted* preference order (worst-first). Cost the LLM bridge
+   10,000 attempts vs 17 post-fix. Fix applied + regression tests added + two luck-dependent
+   tests re-tuned; suite green at 807. Details in the headline section below.
+4. **New crate `ollama-lab/`:** health/generate/stream/chat/embed/bridge/rag subcommands, all
+   green. `bridge` runs your real `speculative_generate` with an LLM as `DraftModel`; `rag` does
+   fully-local retrieval-augmented Q&A over this repo's markdown (46 files, 3.2 s to index).
+5. LLM-as-ranker comparison on the decoy domain: gemma4 19 attempts (optimal-ish), qwen3-coder 32,
+   uniform 26 — the ranker only beats symbolic search when its rankings are good AND ordering
+   semantics are right; each LLM call costs ~1–2 s vs microseconds for uniform.
+
+## Phase 0 — qwen3.8 baseline (01:0x–01:4x)
+
+`ollama pull qwen3.8` → 17 GB on disk, tag `qwen3.8:latest` (= 27b), 256K context, text+image, thinking enabled by default.
+
+| Metric | Value |
+|---|---|
+| RAM while loaded | 17 GB, 100% GPU (Metal) |
+| Cold load | 7.7 s |
+| Warm load | 0.14 s |
+| Prompt eval | 47–57 tok/s |
+| Generation | 24–26 tok/s |
+| Default context in `ollama ps` | 32768 |
+
+Notes:
+- Thinking mode is on by default — it "thinks" even for trivial prompts (adds latency for simple tasks; can be disabled per-request with `"think": false` in the API).
+- Code smoke test: produced a correct, idiomatic Rust `reverse(s: &str) -> String` with doc comment.
+- Model auto-unloads after ~4 min idle (default keep-alive); warm load is instant while resident.
+
+## Phase 1 — Model bench & eval
+
+### qwen3.8:27b probes
+- **Rust codegen**: asked for `top_k` word-frequency fn + test, no-markdown constraint honored;
+  output compiled first try with `rustc --test` and its own test passed. 27.7 tok/s with `think:false`.
+- **Tool calling** (OpenAI-compatible `/v1/chat/completions`): correctly emitted a
+  `run_shell("ls -la")` tool call with `finish_reason: tool_calls` — agent-harness capable.
+- Remaining probes (reasoning, strict-JSON, long-context) pending; will run the same battery on gemma4:26b.
+
+### gemma4:26b probes (02:0x)
+- 17 GB on disk / 17 GB RAM, 100% GPU. Cold load 3.3 s. **75 tok/s generation** (~3× qwen3.8).
+- **Rust codegen**: compiled first try, test passed (same battery as qwen3.8).
+- **Tool calling**: correct `run_shell("ls")` call, `finish_reason: tool_calls`.
+
+### Head-to-head battery (both with think:false)
+| Probe | qwen3.8:27b | gemma4:26b |
+|---|---|---|
+| Rust codegen compile+test | pass | pass |
+| Tool calling (OpenAI endpoint) | pass | pass |
+| Multi-step arithmetic ($67.50) | correct, 25 s | correct, 12 s |
+| JSON schema adherence (unassisted) | pass | pass |
+| JSON schema adherence (format=json) | pass | pass |
+| Generation speed | 25–29 tok/s | **75 tok/s** |
+
+Early read: quality tied on this battery; gemma4:26b wins decisively on speed at equal RAM.
+qwen3.8 retains edges elsewhere: 65K+ usable context configured in Zed, native image+video, thinking mode.
+
+### qwen3-coder:30b and gpt-oss:20b probes (02:4x)
+(qwen3-coder-next was considered but its smallest quant is 52 GB — too big for 48 GB RAM)
+
+## Phase 1 final matrix
+
+| Probe | qwen3.8:27b | gemma4:26b | qwen3-coder:30b | gpt-oss:20b |
+|---|---|---|---|---|
+| Disk / RAM | 17 GB | 17 GB | 18 GB | 13 GB |
+| Cold load | 7.7 s | 3.3 s | 5.4 s | 3.9 s |
+| Generation speed | 25–29 tok/s | 75 tok/s | **90 tok/s** | 65 tok/s |
+| Rust codegen compile+test | pass | pass | fn correct, **its own test assertion wrong** | pass |
+| Multi-step arithmetic | correct | correct | correct | correct |
+| JSON adherence (unassisted) | pass | pass | pass | pass |
+| JSON adherence (format=json) | pass | pass | pass | **PARSE FAIL** |
+| Tool calling (OpenAI endpoint) | pass | pass | pass | pass |
+| Context / extras | 256K, image+video, thinking | 256K, image, thinking, fast | 256K, agentic-coding tuned | 128K, reasoning-effort levels |
+
+**Recommendations:**
+- **Daily driver / Zed agent:** `gemma4:26b` — same quality on this battery as qwen3.8 at ~3× the speed; or `qwen3-coder:30b` for coding sessions (fastest, agentic-tuned, but write your own tests).
+- **Multimodal / long-thinking tasks:** `qwen3.8:27b`.
+- **Caution:** `gpt-oss:20b` failed constrained JSON (`format=json`) — avoid it for structured-output pipelines.
+- `nomic-embed-text` embeddings sane: related concepts 0.451 vs unrelated 0.337 cosine.
+- **Long-context recall** (needle at 70% of a ~16K-token log haystack, num_ctx 32768): both
+  qwen3.8 and gemma4:26b recalled the code exactly. Prompt-processing speed differs sharply:
+  gemma4 **1104 tok/s** vs qwen3.8 306 tok/s (22 s vs 60 s wall) — gemma4 is the better choice
+  for long-document / RAG workloads.
+
+## Phase 2 — ollama-lab scaffold (02:1x–02:3x)
+`ollama-lab/` crate created; **compiled first try against ollama-rs 0.3.6** (article's 0.2 API
+carried over almost unchanged: `ChatMessage::system/user` constructors instead of
+`ChatMessage::new(MessageRole::…)` is the main surface difference).
+- `health` — reqwest GET with a clear "start `ollama serve`" error instead of raw connection-refused
+- `generate` / `stream` — both green against gemma4:26b; token-by-token stdout streaming works
+- `chat` — multi-turn with history green; model answers stayed consistent across turns
+- `embed` — written, waiting for nomic-embed-text
+Model picked per-run via `OLLAMA_MODEL` env (default qwen3.8). Build artifacts go to
+`~/.cargo/target` (global target-dir).
+
+## Phase 3 — ns-engine ↔ Ollama bridge (02:5x)
+
+**Design.** Ollama exposes no per-token logits, so the LLM cannot sit inside the decode loop the
+classic way. But ns-engine's `DraftModel::log_probs` only requires "any ordering signal" — so the
+LLM fits the DRAFT seat as a *ranker*: prompt it with the domain rules + trajectory so far, ask for
+a full ranking of the action vocabulary as constrained JSON (`format=json`, temperature 0), convert
+rank → pseudo-logits. Legality stays with `QuestActionPruner`, dynamics with `QuestState` — the
+ownership boundary ns-engine already draws (draft = fluency, pruner = correctness) maps cleanly
+onto "LLM = fluency, symbolic layer = correctness". Parse failures degrade gracefully to uniform
+logits (all-ties), so the loop never stalls on a bad LLM response.
+
+**Prototype.** `ollama-lab/src/bridge.rs` — `OllamaDraftModel` implements the real
+`ns_engine::DraftModel` trait (ns-engine as path dep); ran `speculative_generate` on the 5-quest
+diamond domain (0 → {1,2} → 3 → 4, goal = quest 4), backtracking mode:
+
+| Draft model | goal | steps | attempts | LLM calls | parse failures |
+|---|---|---|---|---|---|
+| UniformDraftModel | yes | 10 | 14 | — | — |
+| gemma4:26b (ranking) | yes | 10 | 26 | 18 | 0 |
+
+Both found the optimal 10-action trajectory.
+
+**Findings / verdict.**
+- The bridge is *mechanically sound*: constrained JSON ranking over an action vocabulary works
+  reliably (0/18 parse failures with gemma4:26b), and rank→pseudo-logit satisfies the trait contract.
+- On a small, densely-pruned domain the LLM draft is strictly worse than uniform: more attempts
+  (its ranking sometimes promotes illegal actions the pruner then rejects) and ~1–2 s of wall-clock
+  per `log_probs` call vs microseconds for uniform. Symbolic DFS alone already crushes this domain.
+- Where it should pay off: domains with a **large legal branching factor where most legal moves are
+  strategically bad** — the pruner can't help choose among legal moves; the LLM can. Worth a
+  follow-up experiment with a bigger quest graph (e.g. 20+ quests, decoy branches) or Bomber maps.
+- If pursued for real: cache rankings by state hash (`GameState::hash` exists for exactly this),
+  batch the ranking ask ("top 5 next actions" instead of full vocabulary), and consider asking the
+  LLM only at high-branching decision points, falling back to uniform elsewhere.
+
+## ⭐ Headline finding — ns-engine backtrack mode inverts draft preference (03:1x–03:3x)
+
+The decoy-domain bridge experiment (12 quests, goal chain 0→4→8→11, 8 decoys) produced an
+inversion that turned out to be a real ns-engine behavior, not an LLM failure:
+
+| Run | goal | attempts | LLM calls |
+|---|---|---|---|
+| uniform draft | yes | 26 | — |
+| gemma4 ranking, best→highest logit (per trait docs) | **no** | 10,000 (budget) | 5,009 |
+| gemma4 ranking, deliberately INVERTED | yes | **19, zero backtracks** | 19 |
+
+**Mechanism.** `valid_candidates` returns candidates best-first (its docs say so), but
+`generate_with_backtrack` / `decode_with_backtrack` consume them with `untried[depth].pop()` —
+from the END. Backtracking DFS therefore explores the draft's WORST-ranked candidate first.
+Greedy mode uses `valid.first()` — correct. So the two modes assign opposite meanings to the
+same logits, and `DraftModel`'s "higher values = more likely" contract only holds in greedy mode.
+
+**Why no test ever caught it:** every prior backtrack test used `UniformDraftModel` (all logits
+tied → order fully shuffled). The one non-uniform case — `BacktrackDraft` in `tests/bomber.rs` —
+**documents the inversion and is hand-tuned to exploit it** ("tuned for the engine's worst-first
+backtracking search": WAIT ranked highest so it's popped last, moves scored with `+distance` so
+nearest-to-exit pops first).
+
+**Resolution (morning, user-approved): best-first fix ADOPTED.**
+- Two-line fix applied to `decode.rs` + `game.rs` (reverse `valid` before pushing onto `untried`,
+  so `pop()` really takes the best candidate).
+- `tests/backtrack_ordering.rs` added: rigged non-uniform draft asserts best-first exploration and
+  greedy/backtrack agreement.
+- `BacktrackDraft` in `tests/bomber.rs` re-tuned to best-first scoring (moves `1000-distance` >
+  PLACE_BOMB > reverse-of-last > WAIT); doc comments updated.
+- `test_generate_backtrack_respects_max_tokens` in `tests/game_traits.rs` had been passing by
+  tie-shuffle luck while violating the pruner's canonical-origin invariant (starts at D, pruner
+  replays from A); now uses `RightFirstDraft` so it's deterministic.
+- **Full suite green: 807 tests.** The `.logs/` patch artifacts are superseded by the applied fix.
+
+**Post-fix bridge result** (natural best→highest mapping, no workaround): gemma4:26b solved the
+decoy domain in **17 attempts, zero backtracks**, while uniform DFS took 2,682 attempts on the
+same run (tie-shuffle variance) — with correct semantics the LLM draft decisively beats
+uninformed search on strategy-heavy domains.
+
+## Phase 4 — fully-local RAG (03:0x)
+
+`ollama-lab rag "<question>" [model]` — walks `~/mac helper` for markdown (skipping target/,
+dot-dirs), paragraph-aligned ~1200-char chunks, batch-embeds with nomic-embed-text, cosine top-4,
+answers with a local chat model constrained to the retrieved context.
+
+- Corpus: 46 files → 224 chunks, **indexed in 3.2 s** entirely locally.
+- Test query ("ns-engine core thesis + what ConstraintPruner owns"): retrieval ranked
+  `ns-engine/AGENTS.md` first (0.698), pulled related katgpt-pruners README cross-repo; gemma4:26b's
+  answer was accurate and stayed within the provided context.
+- Observation: retrieval quality is good enough for repo-doc Q&A at zero cost and no data egress;
+  the whole loop (index + retrieve + answer) is fast enough to rebuild the index per invocation,
+  so no persistence layer was needed at this corpus size.
+
+## Zed ↔ Ollama handoff (01:5x)
+Added `ollama` provider to `~/.config/zed/settings.json` (backup: `settings.json.bak.pre-ollama`):
+qwen3.8 exposed as "Qwen 3.8 27B (local)", 65536-token context, tools/thinking/images on,
+30 min keep-alive. Select it in Zed's Agent Panel model picker under **Ollama**.
