@@ -64,10 +64,17 @@ fn chunk(source: &str, text: &str) -> Vec<(String, String)> {
     chunks
 }
 
-fn cosine(a: &[f32], b: &[f32]) -> f32 {
+/// Cosine similarity, shared with the `embed` subcommand in main.rs.
+///
+/// A zero-magnitude embedding would make this 0/0 = NaN, which would then
+/// panic the ranking sort; report "no similarity" instead.
+pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if na == 0.0 || nb == 0.0 {
+        return 0.0;
+    }
     dot / (na * nb)
 }
 
@@ -111,7 +118,7 @@ pub async fn run(question: &str, model: &str) -> Result<(), Box<dyn std::error::
 
     let qv = embed_batch(&ollama, vec![question.to_string()]).await?.remove(0);
     let mut scored: Vec<(f32, &Chunk)> = chunks.iter().map(|c| (cosine(&qv, &c.vector), c)).collect();
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     let top = &scored[..TOP_K.min(scored.len())];
 
     println!("\ntop-{TOP_K} retrieved:");

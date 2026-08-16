@@ -76,14 +76,9 @@ async fn chat() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cosine(a: &[f32], b: &[f32]) -> f32 {
-    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    dot / (na * nb)
-}
-
 async fn embed() -> Result<(), Box<dyn std::error::Error>> {
+    use rag::cosine;
+
     let ollama = Ollama::default();
     let texts = [
         "Rust ownership and borrowing",
@@ -123,7 +118,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "bridge" => {
             // reqwest::blocking may not run on a tokio runtime thread — hand
             // the whole sync ns-engine loop to a plain OS thread.
-            let model = args.get(2).cloned().unwrap_or_else(|| "gemma4:26b".to_string());
+            // Skip flags when reading the positional model, so `bridge --big`
+            // doesn't send "--big" to Ollama as the model name.
+            let model = args[2..]
+                .iter()
+                .find(|a| !a.starts_with("--"))
+                .cloned()
+                .unwrap_or_else(|| "gemma4:26b".to_string());
             let big = args.iter().any(|a| a == "--big");
             std::thread::spawn(move || bridge::run(&model, big)).join().unwrap();
         }
