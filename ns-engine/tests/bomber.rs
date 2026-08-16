@@ -740,18 +740,19 @@ impl DraftModel for TowardExitDraft {
     }
 }
 
-/// Draft model tuned for the engine's **worst-first** backtracking search.
+/// Draft model tuned for the engine's **best-first** backtracking search.
 ///
-/// `generate_with_backtrack` pops the LOWEST-logit candidate first
-/// (`untried.pop()`), the opposite of greedy's `valid.first()`. To suit it:
-/// - **WAIT** ranks highest → popped LAST (no WAIT-wandering to `max_tokens`).
-/// - **Reverse of last move** ranks next-highest → deferred, breaking the
+/// `generate_with_backtrack` explores the HIGHEST-logit candidate first
+/// (same preference order as greedy's `valid.first()`). Priorities:
+/// - **Moves** get `logit = 1000 - distance` → nearest-to-exit is highest →
+///   explored FIRST (productive exploration).
+/// - **PLACE_BOMB** ranks next → tried before reversing when stuck.
+/// - **Reverse of last move** ranks below PLACE_BOMB → deferred, breaking the
 ///   A→B→A 2-cycle the symmetric-movement grid would otherwise oscillate
 ///   forever (the engine has no cycle detection).
-/// - **PLACE_BOMB** ranks next → tried before reversing when stuck.
-/// - **Moves** get `logit = +(distance)` → nearest-to-exit is lowest →
-///   popped FIRST (productive exploration).
-/// - **OOB** moves rank lowest (filtered as invalid anyway).
+/// - **WAIT** ranks lowest of the legal actions → explored LAST (no
+///   WAIT-wandering to `max_tokens`).
+/// - **OOB** moves rank lowest overall (filtered as invalid anyway).
 ///
 /// Distinct logits (action-index ε) → deterministic DFS order under a seed.
 struct BacktrackDraft {
@@ -791,11 +792,11 @@ impl DraftModel for BacktrackDraft {
         let h = self.config.height;
         let exit = self.config.exit_index();
 
-        // Anti-oscillation: the engine's worst-first DFS has no cycle
-        // detection, so on a symmetric-movement grid it bounces A→B→A until
-        // `max_tokens` aborts the whole run. Deferring the reverse of the
-        // last move (ranked above PLACE_BOMB) breaks the 2-cycle: when no
-        // forward move is available, PLACE_BOMB is tried before reversing.
+        // Anti-oscillation: the DFS has no cycle detection, so on a
+        // symmetric-movement grid it bounces A→B→A until `max_tokens`
+        // aborts the whole run. Deferring the reverse of the last move
+        // (ranked below PLACE_BOMB) breaks the 2-cycle: when no forward
+        // move is available, PLACE_BOMB is tried before reversing.
         let reverse_of_last = match context.last().copied() {
             Some(ACTION_MOVE_N) => Some(ACTION_MOVE_S),
             Some(ACTION_MOVE_S) => Some(ACTION_MOVE_N),
@@ -807,9 +808,9 @@ impl DraftModel for BacktrackDraft {
         let mut logits = vec![0.0; self.vocab];
         for a in 0..self.vocab as TokenId {
             let logit = match a {
-                ACTION_WAIT => 10_000.0,
-                ACTION_PLACE_BOMB => 5_000.0,
-                _ if Some(a) == reverse_of_last => 6_000.0,
+                ACTION_WAIT => 0.0,
+                ACTION_PLACE_BOMB => 500.0,
+                _ if Some(a) == reverse_of_last => 100.0,
                 _ => match exit {
                     None => 0.0,
                     Some(e) => match delta(a) {
@@ -822,7 +823,8 @@ impl DraftModel for BacktrackDraft {
                                 -1_000.0 // OOB → lowest (invalid anyway)
                             } else {
                                 let ni = ny as usize * w + nx as usize;
-                                manhattan(ni, e, w) as f32 // farther = higher → nearest popped first
+                                // nearer = higher → nearest explored first
+                                1_000.0 - manhattan(ni, e, w) as f32
                             }
                         }
                         None => 0.0,

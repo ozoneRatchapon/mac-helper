@@ -537,7 +537,12 @@ fn test_generate_backtrack_respects_max_tokens() {
     // Force max_tokens below the shortest solution length by starting
     // from D (1 step from goal) — should still succeed. The bound is
     // exercised separately by a longer forced path.
-    let draft = UniformDraftModel::new(FG_VOCAB);
+    //
+    // NOTE: starting from D violates ForkGamePruner's canonical-origin
+    // invariant (it replays from A and would approve LEFT, which is illegal
+    // at D and panics `step`). A right-preferring draft keeps the search on
+    // RIGHT deterministically instead of relying on tie-shuffle luck.
+    let draft = RightFirstDraft { vocab: FG_VOCAB };
     let mut pruner = ForkGamePruner;
     let config = DecodeConfig {
         backtrack: true,

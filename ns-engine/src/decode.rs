@@ -131,6 +131,9 @@ fn decode_with_backtrack(
             // Escapes adversarial orderings (e.g. Inkala's hardest Sudoku)
             // while preserving priority ordering for non-uniform models.
             shuffle_tied_groups(&mut valid, &logits, &mut rng);
+            // valid is best-first, but pop() consumes from the end — reverse
+            // so the best candidate really is "on top" of the stack.
+            valid.reverse();
             untried.push(valid);
         }
 

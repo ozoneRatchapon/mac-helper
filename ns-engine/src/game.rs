@@ -408,6 +408,9 @@ where
             // Shuffle within tied-logit groups for randomized DFS.
             // Same seed → same shuffle → same solution path.
             crate::decode::shuffle_tied_groups(&mut valid, &logits, &mut rng);
+            // valid is best-first, but pop() consumes from the end — reverse
+            // so the best candidate really is "on top" of the stack.
+            valid.reverse();
             untried.push(valid);
         }
 
