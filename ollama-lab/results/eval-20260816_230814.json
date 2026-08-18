@@ -1,0 +1,138 @@
+{
+  "server": "http://127.0.0.1:11434",
+  "stamp": "eval-20260816_230814.json",
+  "tasks": [
+    "rust_codegen",
+    "json_unassisted",
+    "json_format",
+    "arithmetic",
+    "tool_call",
+    "needle",
+    "multi_turn"
+  ],
+  "models": [
+    {
+      "model": "gemma4:26b",
+      "overall": 1.0,
+      "tasks": [
+        {
+          "name": "rust_codegen",
+          "score": 1.0,
+          "detail": "compiles, output contains 2550 (stdout=\"2550\")"
+        },
+        {
+          "name": "json_unassisted",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "json_format",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "arithmetic",
+          "score": 1.0,
+          "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)"
+        },
+        {
+          "name": "tool_call",
+          "score": 1.0,
+          "detail": "correct tool call"
+        },
+        {
+          "name": "needle",
+          "score": 1.0,
+          "detail": "recalled ZEPHYR-9271"
+        },
+        {
+          "name": "multi_turn",
+          "score": 1.0,
+          "detail": "remembered 74"
+        }
+      ]
+    },
+    {
+      "model": "qwen3-coder:30b",
+      "overall": 1.0,
+      "tasks": [
+        {
+          "name": "rust_codegen",
+          "score": 1.0,
+          "detail": "compiles, output contains 2550 (stdout=\"2550\")"
+        },
+        {
+          "name": "json_unassisted",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "json_format",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "arithmetic",
+          "score": 1.0,
+          "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)"
+        },
+        {
+          "name": "tool_call",
+          "score": 1.0,
+          "detail": "correct tool call"
+        },
+        {
+          "name": "needle",
+          "score": 1.0,
+          "detail": "recalled ZEPHYR-9271"
+        },
+        {
+          "name": "multi_turn",
+          "score": 1.0,
+          "detail": "remembered 74"
+        }
+      ]
+    },
+    {
+      "model": "qwen3.8:latest",
+      "overall": 1.0,
+      "tasks": [
+        {
+          "name": "rust_codegen",
+          "score": 1.0,
+          "detail": "compiles, output contains 2550 (stdout=\"2550\")"
+        },
+        {
+          "name": "json_unassisted",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "json_format",
+          "score": 1.0,
+          "detail": "schema satisfied"
+        },
+        {
+          "name": "arithmetic",
+          "score": 1.0,
+          "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)"
+        },
+        {
+          "name": "tool_call",
+          "score": 1.0,
+          "detail": "correct tool call"
+        },
+        {
+          "name": "needle",
+          "score": 1.0,
+          "detail": "recalled ZEPHYR-9271"
+        },
+        {
+          "name": "multi_turn",
+          "score": 1.0,
+          "detail": "remembered 74"
+        }
+      ]
+    }
+  ]
+}

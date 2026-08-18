@@ -5,9 +5,9 @@
 //!
 //! Run: `cargo run -- rag "<question>" [model]` (default gemma4:26b).
 
+use ollama_rs::Ollama;
 use ollama_rs::generation::completion::request::GenerationRequest;
 use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
-use ollama_rs::Ollama;
 use std::path::{Path, PathBuf};
 
 const EMBED_MODEL: &str = "nomic-embed-text";
@@ -25,7 +25,9 @@ fn collect_markdown(roots: &[&Path]) -> Vec<(String, String)> {
     let mut docs = Vec::new();
     let mut stack: Vec<PathBuf> = roots.iter().map(|p| p.to_path_buf()).collect();
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
@@ -35,11 +37,13 @@ fn collect_markdown(roots: &[&Path]) -> Vec<(String, String)> {
                     stack.push(path);
                 }
             } else if name.ends_with(".md")
-                && entry.metadata().map(|m| m.len() <= MAX_FILE_BYTES).unwrap_or(false)
+                && entry
+                    .metadata()
+                    .map(|m| m.len() <= MAX_FILE_BYTES)
+                    .unwrap_or(false)
+                && let Ok(text) = std::fs::read_to_string(&path)
             {
-                if let Ok(text) = std::fs::read_to_string(&path) {
-                    docs.push((path.display().to_string(), text));
-                }
+                docs.push((path.display().to_string(), text));
             }
         }
     }
@@ -111,13 +115,24 @@ pub async fn run(question: &str, model: &str) -> Result<(), Box<dyn std::error::
         let texts: Vec<String> = batch.iter().map(|(_, t)| t.clone()).collect();
         let vectors = embed_batch(&ollama, texts).await?;
         for ((source, text), vector) in batch.iter().cloned().zip(vectors) {
-            chunks.push(Chunk { source, text, vector });
+            chunks.push(Chunk {
+                source,
+                text,
+                vector,
+            });
         }
     }
-    println!("indexed in {:.1}s (local {})", t0.elapsed().as_secs_f32(), EMBED_MODEL);
+    println!(
+        "indexed in {:.1}s (local {})",
+        t0.elapsed().as_secs_f32(),
+        EMBED_MODEL
+    );
 
-    let qv = embed_batch(&ollama, vec![question.to_string()]).await?.remove(0);
-    let mut scored: Vec<(f32, &Chunk)> = chunks.iter().map(|c| (cosine(&qv, &c.vector), c)).collect();
+    let qv = embed_batch(&ollama, vec![question.to_string()])
+        .await?
+        .remove(0);
+    let mut scored: Vec<(f32, &Chunk)> =
+        chunks.iter().map(|c| (cosine(&qv, &c.vector), c)).collect();
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     let top = &scored[..TOP_K.min(scored.len())];
 

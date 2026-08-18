@@ -1,15 +1,16 @@
 //! ollama-lab — local Ollama integration lab (all inference stays on 127.0.0.1:11434).
 //!
-//! Usage: ollama-lab <health|generate|stream|chat|embed> [prompt...]
+//! Usage: ollama-lab <health|generate|stream|chat|embed|bridge|rag|eval> [args...]
 //! Model selection: OLLAMA_MODEL env var (default: qwen3.8).
 
 mod bridge;
+mod eval;
 mod rag;
 
-use ollama_rs::generation::chat::{request::ChatMessageRequest, ChatMessage};
+use ollama_rs::Ollama;
+use ollama_rs::generation::chat::{ChatMessage, request::ChatMessageRequest};
 use ollama_rs::generation::completion::request::GenerationRequest;
 use ollama_rs::generation::embeddings::request::{EmbeddingsInput, GenerateEmbeddingsRequest};
-use ollama_rs::Ollama;
 use tokio::io::AsyncWriteExt;
 use tokio_stream::StreamExt;
 
@@ -27,7 +28,9 @@ async fn health() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Ok(r) => Err(format!("server responded with {}", r.status()).into()),
-        Err(_) => Err("Ollama server unreachable at 127.0.0.1:11434 — start it with `ollama serve`".into()),
+        Err(_) => Err(
+            "Ollama server unreachable at 127.0.0.1:11434 — start it with `ollama serve`".into(),
+        ),
     }
 }
 
@@ -95,8 +98,14 @@ async fn embed() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
         vectors.push(res.embeddings.into_iter().next().unwrap_or_default());
     }
-    println!("sim(ownership, memory-mgmt) = {:.3}", cosine(&vectors[0], &vectors[1]));
-    println!("sim(ownership, sourdough)   = {:.3}", cosine(&vectors[0], &vectors[2]));
+    println!(
+        "sim(ownership, memory-mgmt) = {:.3}",
+        cosine(&vectors[0], &vectors[1])
+    );
+    println!(
+        "sim(ownership, sourdough)   = {:.3}",
+        cosine(&vectors[0], &vectors[2])
+    );
     Ok(())
 }
 
@@ -104,9 +113,16 @@ async fn embed() -> Result<(), Box<dyn std::error::Error>> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(String::as_str).unwrap_or("help");
-    let prompt = args[2..].join(" ");
+    // `args.get(2..)` rather than `args[2..]`: running the binary with no
+    // arguments leaves a slice of length 1 and indexing it panics before the
+    // usage message can print.
+    let prompt = args.get(2..).unwrap_or(&[]).join(" ");
     let default_prompt = "Explain Rust's borrow checker in two sentences.";
-    let prompt = if prompt.is_empty() { default_prompt } else { &prompt };
+    let prompt = if prompt.is_empty() {
+        default_prompt
+    } else {
+        &prompt
+    };
 
     health().await?;
     match cmd {
@@ -120,20 +136,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // the whole sync ns-engine loop to a plain OS thread.
             // Skip flags when reading the positional model, so `bridge --big`
             // doesn't send "--big" to Ollama as the model name.
-            let model = args[2..]
+            let model = args
+                .get(2..)
+                .unwrap_or(&[])
                 .iter()
                 .find(|a| !a.starts_with("--"))
                 .cloned()
                 .unwrap_or_else(|| "gemma4:26b".to_string());
             let big = args.iter().any(|a| a == "--big");
-            std::thread::spawn(move || bridge::run(&model, big)).join().unwrap();
+            std::thread::spawn(move || bridge::run(&model, big))
+                .join()
+                .unwrap();
         }
         "rag" => {
-            let q = args.get(2).cloned().unwrap_or_else(|| "What is ns-engine's core thesis?".to_string());
-            let m = args.get(3).cloned().unwrap_or_else(|| "gemma4:26b".to_string());
+            let q = args
+                .get(2)
+                .cloned()
+                .unwrap_or_else(|| "What is ns-engine's core thesis?".to_string());
+            let m = args
+                .get(3)
+                .cloned()
+                .unwrap_or_else(|| "gemma4:26b".to_string());
             rag::run(&q, &m).await?;
         }
-        _ => eprintln!("usage: ollama-lab <health|generate|stream|chat|embed|bridge|rag> [args...]"),
+        "eval" => {
+            // Fixed scored task suite; reqwest::blocking runs on a plain OS
+            // thread (same pattern as `bridge`).
+            let models: Vec<String> = args
+                .get(2..)
+                .unwrap_or(&[])
+                .iter()
+                .filter(|a| !a.starts_with("--"))
+                .cloned()
+                .collect();
+            let models = if models.is_empty() {
+                vec![
+                    "gemma4:26b".to_string(),
+                    "qwen3-coder:30b".to_string(),
+                    "qwen3.8:latest".to_string(),
+                ]
+            } else {
+                models
+            };
+            let handle = std::thread::spawn(move || eval::run(&models));
+            if handle.join().is_err() {
+                eprintln!("eval thread panicked");
+            }
+        }
+        _ => eprintln!(
+            "usage: ollama-lab <health|generate|stream|chat|embed|bridge|rag|eval> [args...]"
+        ),
     }
     Ok(())
 }

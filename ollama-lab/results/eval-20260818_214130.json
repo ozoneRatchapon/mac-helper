@@ -1,0 +1,197 @@
+{
+  "server": "http://127.0.0.1:11434",
+  "stamp": "eval-20260818_214130.json",
+  "base_tasks": [
+    "rust_codegen",
+    "json_unassisted",
+    "json_format",
+    "arithmetic",
+    "tool_call",
+    "needle",
+    "multi_turn"
+  ],
+  "hard_tasks": [
+    "arith_words",
+    "codegen_strict",
+    "json_deep",
+    "tool_choice",
+    "needle_deep",
+    "multi_turn_update"
+  ],
+  "models": [
+    {
+      "model": "gemma4:26b",
+      "base": 1.0,
+      "hard": 0.9166666666666666,
+      "overall": 0.9615384615384616,
+      "total_elapsed_ms": 47504,
+      "tasks": [
+        {
+          "name": "rust_codegen",
+          "score": 1.0,
+          "detail": "compiles, output contains 2550 (stdout=\"2550\")",
+          "elapsed_ms": 10066
+        },
+        {
+          "name": "json_unassisted",
+          "score": 1.0,
+          "detail": "schema satisfied",
+          "elapsed_ms": 1047
+        },
+        {
+          "name": "json_format",
+          "score": 1.0,
+          "detail": "schema satisfied",
+          "elapsed_ms": 955
+        },
+        {
+          "name": "arithmetic",
+          "score": 1.0,
+          "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)",
+          "elapsed_ms": 817
+        },
+        {
+          "name": "tool_call",
+          "score": 1.0,
+          "detail": "correct tool call",
+          "elapsed_ms": 744
+        },
+        {
+          "name": "needle",
+          "score": 1.0,
+          "detail": "recalled ZEPHYR-9271",
+          "elapsed_ms": 11538
+        },
+        {
+          "name": "multi_turn",
+          "score": 1.0,
+          "detail": "remembered 74",
+          "elapsed_ms": 797
+        },
+        {
+          "name": "arith_words",
+          "score": 0.5,
+          "detail": "\"A bakery has 13 crates, each holding 90 eggs. 250 eggs are broken and discarded. The remaining good eggs are split equally into 2 bins. How many eggs are in one bin? Answer with only the number.\" -> expected 460, got \"535\"; \"A shop sold 40 loaves of bread on Monday, 55 loaves on Tuesday, and 110 loaves on Wednesday. It also had 50 loaves left in storage at the end of the week, which it did not sell. How many loaves did it sell in total over those three days? Answer with only the number.\" -> correct (205)",
+          "elapsed_ms": 839
+        },
+        {
+          "name": "codegen_strict",
+          "score": 1.0,
+          "detail": "stdin=\"1,-2,3,-4\" -> \"20\" ok; stdin=\"5,7,9\" -> \"none\" ok; stdin=\"-3,10,-1\" -> \"10\" ok",
+          "elapsed_ms": 4923
+        },
+        {
+          "name": "json_deep",
+          "score": 1.0,
+          "detail": "name ok; version(semver) ok; date(ISO) ok; yanked(bool) ok; changes=2 objects ok; items type+summary(3-10 words) ok",
+          "elapsed_ms": 2109
+        },
+        {
+          "name": "tool_choice",
+          "score": 1.0,
+          "detail": "tool (want send_email, got send_email) ok; to (got \"maria@example.com\") ok; payload (got \"see you at 5\") ok",
+          "elapsed_ms": 1093
+        },
+        {
+          "name": "needle_deep",
+          "score": 1.0,
+          "detail": "recalled ATLAS-4815",
+          "elapsed_ms": 11396
+        },
+        {
+          "name": "multi_turn_update",
+          "score": 1.0,
+          "detail": "updated to 96, dropped 74",
+          "elapsed_ms": 1180
+        }
+      ]
+    },
+    {
+      "model": "qwen3-coder:30b",
+      "base": 1.0,
+      "hard": 0.7916666666666666,
+      "overall": 0.9038461538461539,
+      "total_elapsed_ms": 59555,
+      "tasks": [
+        {
+          "name": "rust_codegen",
+          "score": 1.0,
+          "detail": "compiles, output contains 2550 (stdout=\"2550\")",
+          "elapsed_ms": 7737
+        },
+        {
+          "name": "json_unassisted",
+          "score": 1.0,
+          "detail": "schema satisfied",
+          "elapsed_ms": 681
+        },
+        {
+          "name": "json_format",
+          "score": 1.0,
+          "detail": "schema satisfied",
+          "elapsed_ms": 629
+        },
+        {
+          "name": "arithmetic",
+          "score": 1.0,
+          "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)",
+          "elapsed_ms": 448
+        },
+        {
+          "name": "tool_call",
+          "score": 1.0,
+          "detail": "correct tool call",
+          "elapsed_ms": 649
+        },
+        {
+          "name": "needle",
+          "score": 1.0,
+          "detail": "recalled ZEPHYR-9271",
+          "elapsed_ms": 18463
+        },
+        {
+          "name": "multi_turn",
+          "score": 1.0,
+          "detail": "remembered 74",
+          "elapsed_ms": 1075
+        },
+        {
+          "name": "arith_words",
+          "score": 1.0,
+          "detail": "\"A bakery has 13 crates, each holding 90 eggs. 250 eggs are broken and discarded. The remaining good eggs are split equally into 2 bins. How many eggs are in one bin? Answer with only the number.\" -> correct (460); \"A shop sold 40 loaves of bread on Monday, 55 loaves on Tuesday, and 110 loaves on Wednesday. It also had 50 loaves left in storage at the end of the week, which it did not sell. How many loaves did it sell in total over those three days? Answer with only the number.\" -> correct (205)",
+          "elapsed_ms": 1068
+        },
+        {
+          "name": "codegen_strict",
+          "score": 1.0,
+          "detail": "stdin=\"1,-2,3,-4\" -> \"20\" ok; stdin=\"5,7,9\" -> \"none\" ok; stdin=\"-3,10,-1\" -> \"10\" ok",
+          "elapsed_ms": 4247
+        },
+        {
+          "name": "json_deep",
+          "score": 1.0,
+          "detail": "name ok; version(semver) ok; date(ISO) ok; yanked(bool) ok; changes=2 objects ok; items type+summary(3-10 words) ok",
+          "elapsed_ms": 1864
+        },
+        {
+          "name": "tool_choice",
+          "score": 0.5,
+          "detail": "tool (want send_email, got send_email) ok; to (got \"\") FAIL; payload (got \"\") FAIL",
+          "elapsed_ms": 755
+        },
+        {
+          "name": "needle_deep",
+          "score": 0.25,
+          "detail": "decoy, got \"ZEPHYR-1101\"",
+          "elapsed_ms": 20427
+        },
+        {
+          "name": "multi_turn_update",
+          "score": 1.0,
+          "detail": "updated to 96, dropped 74",
+          "elapsed_ms": 1512
+        }
+      ]
+    }
+  ]
+}
