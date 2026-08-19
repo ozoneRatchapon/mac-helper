@@ -520,3 +520,196 @@ fn absorb_compress_after_arena_run() {
         "at most 3 patterns can be absorbed, got {dropped}"
     );
 }
+
+// ── Group 6: decode-loop reward attribution ────────────────────
+//
+// Why this group exists (added 2026-08-19):
+//
+// Groups 2 and 3 prove the bandit LEARNS — but they drive it through
+// `BanditPruner::trial`, a direct API that never enters the decode loop. That
+// left the loop's wiring unproven, and it was in fact broken: `propagate`
+// re-derived its arm from a pattern hashed over the POST-push token vector
+// while `batch_is_valid` had hashed the prefix, so the reward, the
+// `committed[]` blame record, and the forwarded `propagate` could all land on
+// a different arm than the one that actually filtered the token (fixed in
+// 021b13a). `AGENTS.md` §6 names this exact failure — "if selection differs
+// between read and write, the bandit rewards an arm that didn't actually fire
+// → silent corruption of the trial log" — yet every test in this file passed
+// 17/17 both before and after the fix, so the gate certified nothing about it.
+//
+// These tests close that hole: they run through `speculative_decode` and
+// assert the loop's attribution directly. Reintroduce the bug and they fail.
+
+use std::sync::{Arc, Mutex};
+
+/// Records which arm index served each hook, so read/write agreement can be
+/// asserted from outside the bandit.
+#[derive(Clone)]
+struct AttributionSpy {
+    index: usize,
+    calls: Arc<Mutex<Vec<(&'static str, usize)>>>,
+}
+
+impl ns_engine::ConstraintPruner for AttributionSpy {
+    fn is_valid(&self, _d: usize, _t: TokenId, _p: &[TokenId]) -> bool {
+        true
+    }
+
+    fn batch_is_valid(&self, _d: usize, c: &[TokenId], _p: &[TokenId], r: &mut [bool]) {
+        self.calls.lock().unwrap().push(("validate", self.index));
+        let len = c.len().min(r.len());
+        r[..len].fill(true);
+    }
+
+    fn manifold_score(&self, _d: usize, _t: TokenId, _p: &[TokenId]) -> f32 {
+        1.0
+    }
+
+    fn propagate(&mut self, _d: usize, _t: TokenId, _p: &[TokenId]) {
+        self.calls.lock().unwrap().push(("propagate", self.index));
+    }
+}
+
+impl ScreeningPruner for AttributionSpy {
+    fn arm_id(&self) -> ns_engine::ArmId {
+        self.index as ns_engine::ArmId
+    }
+
+    fn arm_label(&self) -> &str {
+        "attribution-spy"
+    }
+
+    fn screen(&self, _d: usize, _t: TokenId, _p: &[TokenId]) -> f32 {
+        // Distinct screen scores so the two arms are not interchangeable to
+        // the policy: arm 0 looks useless, arm 1 looks good.
+        match self.index {
+            0 => 0.0,
+            _ => 1.0,
+        }
+    }
+}
+
+/// Draft with distinct, stable logits — a uniform model would let
+/// `shuffle_tied_groups` randomise the order and blur what is being measured.
+struct FixedDraft {
+    vocab: usize,
+}
+
+impl ns_engine::DraftModel for FixedDraft {
+    fn vocab_size(&self) -> usize {
+        self.vocab
+    }
+    fn log_probs(&self, _c: &[TokenId]) -> ns_engine::Logits {
+        (0..self.vocab).map(|i| 1.0 - i as f32 * 0.1).collect()
+    }
+}
+
+fn attribution_config(backtrack: bool) -> DecodeConfig {
+    DecodeConfig {
+        max_tokens: 4,
+        top_k: 3,
+        seed: 42,
+        backtrack,
+        max_attempts: 100,
+    }
+}
+
+/// The arm that validates a token must be the arm that receives its
+/// `propagate` — the read/write agreement `AGENTS.md` §6 requires.
+#[test]
+fn decode_loop_propagates_to_the_arm_that_validated() {
+    for backtrack in [false, true] {
+        let calls: Arc<Mutex<Vec<(&'static str, usize)>>> = Arc::new(Mutex::new(Vec::new()));
+        let arms: Vec<Box<dyn ScreeningPruner>> = vec![
+            Box::new(AttributionSpy {
+                index: 0,
+                calls: Arc::clone(&calls),
+            }),
+            Box::new(AttributionSpy {
+                index: 1,
+                calls: Arc::clone(&calls),
+            }),
+        ];
+        let mut bandit = BanditPruner::new(arms, BanditPolicy::ucb1());
+        let draft = FixedDraft { vocab: 3 };
+
+        // Two runs: the first seeds the trial log, so the second exercises the
+        // path where a pattern already has statistics. With the pre-fix code
+        // the second run mismatches on every step.
+        for _ in 0..2 {
+            let _ = speculative_decode(&draft, &mut bandit, &attribution_config(backtrack));
+        }
+
+        let events = calls.lock().unwrap().clone();
+        let pairs: Vec<(usize, usize)> = events
+            .chunks(2)
+            .filter(|w| w.len() == 2 && w[0].0 == "validate" && w[1].0 == "propagate")
+            .map(|w| (w[0].1, w[1].1))
+            .collect();
+
+        assert!(
+            !pairs.is_empty(),
+            "backtrack={backtrack}: no validate/propagate pairs recorded"
+        );
+        let mismatched: Vec<_> = pairs.iter().filter(|(v, p)| v != p).collect();
+        assert!(
+            mismatched.is_empty(),
+            "backtrack={backtrack}: propagate went to a different arm than validated: {mismatched:?}"
+        );
+    }
+}
+
+/// Driven through the decode loop, the bandit must actually LEARN — the
+/// higher-screening arm should end up with more pulls than the useless one.
+///
+/// This is the Phase 2 claim ("converges to the optimal arm") asserted through
+/// `speculative_decode` rather than through the direct `trial` API that groups
+/// 2 and 3 use. It is load-bearing for the attribution bug in a way a
+/// reward-value check is not: `propagate` computed its reward from the same
+/// arm it had just mis-selected, so reward and arm stayed internally
+/// consistent even when both were wrong. What the bug destroys is *learning* —
+/// selection keyed on a post-push pattern that is fresh almost every time, so
+/// the policy never accumulates evidence and keeps falling back to the first
+/// untried arm.
+#[test]
+fn decode_loop_bandit_converges_to_the_better_arm() {
+    let calls: Arc<Mutex<Vec<(&'static str, usize)>>> = Arc::new(Mutex::new(Vec::new()));
+    let arms: Vec<Box<dyn ScreeningPruner>> = vec![
+        Box::new(AttributionSpy {
+            index: 0,
+            calls: Arc::clone(&calls),
+        }),
+        Box::new(AttributionSpy {
+            index: 1,
+            calls: Arc::clone(&calls),
+        }),
+    ];
+    let mut bandit = BanditPruner::new(arms, BanditPolicy::ucb1());
+    let draft = FixedDraft { vocab: 3 };
+
+    for _ in 0..40 {
+        let _ = speculative_decode(&draft, &mut bandit, &attribution_config(true));
+    }
+
+    // Count which arm each depth's committed token actually went through.
+    let events = calls.lock().unwrap().clone();
+    let mut fired = [0usize; 2];
+    for (hook, arm) in &events {
+        if *hook == "propagate" {
+            fired[*arm] += 1;
+        }
+    }
+
+    assert!(
+        fired[0] + fired[1] > 0,
+        "no propagate calls recorded across 40 decode runs"
+    );
+    assert!(
+        fired[1] > fired[0],
+        "bandit should favour arm 1 (screen 1.0) over arm 0 (screen 0.0) once it has evidence, \
+         but arm 0 fired {} times and arm 1 fired {} times — selection is not learning through \
+         the decode loop",
+        fired[0],
+        fired[1]
+    );
+}

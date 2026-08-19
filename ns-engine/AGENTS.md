@@ -244,22 +244,26 @@ Phase-specific gates:
 
 ## 10. Phase Status & Roadmap
 
-| Phase | Status | Next gate |
+| Phase | Status | Proof |
 |---|---|---|
-| 1 — Minimal loop (Sudoku) | ✅ Complete | — |
-| 2 — BanditPruner (UCB1/ε/Thompson) | ✅ Complete | Hardening (Absorb inline, Beta Thompson) |
-| 4 — KG triple injection | ⬜ Recommended next | NIAH 100%, verbatim recall |
-| 3 — WASM hot-swap (wasmi) | ⬜ Capstone | <10ms swap, regression suite passes |
-| 5 — Domain generalization | ⬜ Last | ≥3 domains proven |
+| 1 — Minimal loop (Sudoku) | ✅ Complete | `tests/phase1_sudoku.rs` |
+| 2 — BanditPruner (UCB1/ε/Thompson) | ✅ Complete | `tests/phase2_bandit.rs` (incl. decode-loop attribution, group 6) |
+| 3 — WASM hot-swap (wasmi) | ✅ Complete | `tests/phase3_wasm_hotswap.rs` (feature-gated — run command below) |
+| 4 — KG triple injection | ✅ Complete | `tests/phase4_kg_grounding.rs` |
+| 5 — Domain generalization | ✅ Complete | `tests/phase5_arena.rs` + `tests/phase5_benchmark.rs` |
 
-**Recommended order** (departs from plan numbering — risk-weighted):
-1. Phase 2 hardening (low risk, in-band edits).
-2. Phase 4 (KG) — extends the proven reward mechanism.
-3. Phase 3 (WASM) — capstone, highest new surface area; do it last so WASM
-   pruners can immediately query `KgStore`.
-4. Phase 5 (domains) — breadth work, after the core is stable.
+**Only open item:** Phase 2 hardening (Absorb inline, Beta Thompson).
+It touches arm selection and reward attribution (§5) — requires a design
+discussion before implementation; do not guess at reward-sign changes.
 
-If a maintainer overrides this order, document why in the handover.
+**Feature-gated tests:** `tests/phase3_wasm_hotswap.rs` is behind the
+non-default `wasm-pruner` feature, so a plain `cargo test` runs **0 tests**
+from it. Run it explicitly to see the Phase 3 proof (requires the
+`wasm32-unknown-unknown` target installed):
+
+```sh
+cargo test --features wasm-pruner --test phase3_wasm_hotswap
+```
 
 ---
 
@@ -312,5 +316,5 @@ RUST_LOG=info cargo test -- --nocapture
 
 ---
 
-**Version:** 1.0 (post-Phase 2)
+**Version:** 1.1 (post-Phase 5)
 **Maintainer of record:** see `.handovers/` latest entry
