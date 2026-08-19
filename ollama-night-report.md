@@ -240,6 +240,94 @@ answers with a local chat model constrained to the retrieved context.
   the whole loop (index + retrieve + answer) is fast enough to rebuild the index per invocation,
   so no persistence layer was needed at this corpus size.
 
+## Follow-up (2026-08-17) — how far can Zed's context actually go?
+
+Zed's Ollama provider passes `max_tokens` straight through as `num_ctx` (confirmed in Zed docs and
+visible in `ollama ps`). Both models declare a 262,144-token native ceiling. Question was whether
+48 GB of RAM can back that.
+
+**Load test — all six configs loaded, 100% GPU, no CPU spill:**
+
+| Model | num_ctx 131072 | 200000 | 262144 |
+|---|---|---|---|
+| gemma4:26b | 17 GB, 5 s | 17 GB, 5 s | 17 GB, 3 s |
+| qwen3.8 | 17 GB, 5 s | 18 GB, 6 s | 18 GB, 6 s |
+
+Ollama does **not** preallocate the KV cache — it grows with tokens actually used. An earlier
+estimate in this file ("256K needs ~52 GB, won't fit") described a *full* context, not the load
+footprint, and was wrong as a practical limit.
+
+**Fill test — gemma4:26b at num_ctx=200000, a real ~743 KB prompt:**
+
+| Metric | Value |
+|---|---|
+| Prompt tokens processed | 100,003 |
+| Resident size / processor | **17 GB, stayed 100% GPU** |
+| Prompt eval rate | **286 tok/s** (vs 1071 tok/s at ~8K context) |
+| Wall clock, single query | **360 s** |
+| Needle recall (planted at 70% depth) | correct (`ORION-4417`) |
+
+**Verdict: the binding constraint is TIME, not RAM.** Resident size never left 17 GB, never spilled
+to CPU, and recall at depth stayed correct — but prompt throughput degraded ~3.7x and one
+100K-token query took six minutes. Since Zed fills whatever window it is given, a large
+`max_tokens` mostly buys slow turns rather than outright failures.
+
+Settings now: both Ollama models at `max_tokens: 200000` (matching the GLM entry's number; backup
+at `~/.config/zed/settings.json.bak.pre-ctx200k`). The *shape* cannot be copied from GLM — that is
+an `openai_compatible` provider with `max_output_tokens` / `max_completion_tokens` / `capabilities`,
+while the Ollama provider supports only `name`, `display_name`, `max_tokens`, `keep_alive`,
+`supports_tools`, `supports_thinking`, `supports_images`.
+
+For long-context work prefer **gemma4:26b** — sliding-window attention (window 1024) keeps its KV
+cache far cheaper than qwen3.8's full attention over 65 layers (~133 KB/token).
+
+## Follow-up (2026-08-19) — does quantization cost us anything?
+
+Every local model here runs Q4_K_M. That raised a question the suite could not answer from
+inside: when a model fails a task, is that the model, or the 4-bit compression?
+
+A free community endpoint (HF Space `victor/Qwen3.8-27B-free-endpoint`, 1×H200 / vLLM) serves
+**unquantized BF16 Qwen3.8-27B** — the same model as local `qwen3.8:latest`, at full precision,
+no key required. `ollama-lab eval` gained an `--openai <base-url>` flag so the identical task
+definitions and scorers could measure it; running two implementations would have made the
+numbers incomparable.
+
+| Task | BF16 (hosted) | Q4_K_M (local) |
+|---|---|---|
+| rust_codegen | 1.00 | 1.00 |
+| json_unassisted / json_format | 1.00 | 1.00 |
+| arithmetic | 1.00 | 1.00 |
+| tool_call | 1.00 | 1.00 |
+| needle | 1.00 | 1.00 |
+| multi_turn | 1.00 | 1.00 |
+| **arith_words** | **0.50** | **0.50** |
+| codegen_strict | 1.00 | 1.00 |
+| json_deep | 1.00 | 1.00 |
+| tool_choice | 1.00 | 1.00 |
+| needle_deep | 1.00 | 1.00 |
+| multi_turn_update | 1.00 | 1.00 |
+| **overall** | **0.96** | **0.96** |
+
+**Identical across all thirteen tasks.** Q4_K_M compresses the model roughly fourfold and costs
+nothing measurable here.
+
+The one shared failure makes the point more strongly than the matching totals do: both miss the
+same bakery word problem, but *differently* — Q4 answered 447, BF16 answered 4325, correct is
+460. A quantization artifact would look like BF16 succeeding where Q4 fails. Two different wrong
+answers to the same question is a model limitation with multi-step arithmetic carrying a
+distractor value, at any precision. The fix is a calculator tool or a different model, not a
+better quant.
+
+Also settled: `qwen3.8` Q4 scores 0.96, exactly matching `gemma4:26b`, and both miss only
+arith_words. `qwen3-coder:30b` sits at 0.90 — its needle_deep failure (grabbing a decoy) is
+specific to that model, not a general long-context weakness, since qwen3.8 scores 1.00 on the
+same task.
+
+Result files carry a `backend` field: `ollama-native` rows form the local ratchet, `openai` rows
+came from a remote endpoint and must not be compared against them as though the setup were the
+same. The endpoint's own timings ranged from 1.5 s to 245 s — it is shared and rate-limited, and
+its author says it will be retired. Useful as a one-off reference, not as a dependency.
+
 ## Zed ↔ Ollama handoff (01:5x)
 Added `ollama` provider to `~/.config/zed/settings.json` (backup: `settings.json.bak.pre-ollama`):
 qwen3.8 exposed as "Qwen 3.8 27B (local)", 65536-token context, tools/thinking/images on,

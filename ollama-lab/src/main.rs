@@ -162,12 +162,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "eval" => {
             // Fixed scored task suite; reqwest::blocking runs on a plain OS
             // thread (same pattern as `bridge`).
-            let models: Vec<String> = args
-                .get(2..)
-                .unwrap_or(&[])
+            // `--openai <base-url>` retargets the suite at any
+            // OpenAI-compatible endpoint, so the same tasks and scorers can
+            // measure a hosted build against the local one.
+            let rest = args.get(2..).unwrap_or(&[]);
+            if let Some(i) = rest.iter().position(|a| a == "--openai") {
+                match rest.get(i + 1) {
+                    Some(url) => eval::set_openai_backend(url),
+                    None => {
+                        eprintln!("--openai needs a base URL, e.g. --openai https://host/v1");
+                        return Ok(());
+                    }
+                }
+            }
+            let skip_next = rest
                 .iter()
-                .filter(|a| !a.starts_with("--"))
-                .cloned()
+                .position(|a| a == "--openai")
+                .map(|i| i + 1)
+                .unwrap_or(usize::MAX);
+            let models: Vec<String> = rest
+                .iter()
+                .enumerate()
+                .filter(|(i, a)| !a.starts_with("--") && *i != skip_next)
+                .map(|(_, a)| a.clone())
                 .collect();
             let models = if models.is_empty() {
                 vec![

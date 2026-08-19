@@ -30,6 +30,97 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 const OLLAMA: &str = "http://127.0.0.1:11434";
+
+/// Where the suite sends its requests.
+///
+/// Default is the local Ollama native API. `--openai <base-url>` switches to a
+/// generic OpenAI-compatible `/chat/completions`, so the SAME task definitions
+/// and scorers can measure a remote endpoint — the only way to compare, say, a
+/// BF16 hosted build against the local quantized one without two divergent
+/// implementations of the suite.
+pub struct Backend {
+    pub base: String,
+    pub openai: bool,
+}
+
+static BACKEND: std::sync::OnceLock<Backend> = std::sync::OnceLock::new();
+
+fn backend() -> &'static Backend {
+    BACKEND.get_or_init(|| Backend {
+        base: OLLAMA.to_string(),
+        openai: false,
+    })
+}
+
+/// Point the suite at an OpenAI-compatible endpoint. Must be called before the
+/// first request; later calls are ignored.
+pub fn set_openai_backend(base_url: &str) {
+    let _ = BACKEND.set(Backend {
+        base: base_url.trim_end_matches('/').to_string(),
+        openai: true,
+    });
+}
+
+/// Extract `choices[0].message.content` from an OpenAI-compatible reply.
+///
+/// Thinking models can return an empty `content` with the text in `reasoning`;
+/// treat that as a failure rather than scoring an empty answer, since the two
+/// look identical to the scorers otherwise.
+fn openai_content(v: &Value) -> Result<String, String> {
+    let msg = v
+        .pointer("/choices/0/message")
+        .ok_or_else(|| format!("no choices[0].message: {}", &v.to_string()[..200.min(v.to_string().len())]))?;
+    let content = msg.get("content").and_then(Value::as_str).unwrap_or("");
+    if content.is_empty() {
+        let reasoning_len = msg
+            .get("reasoning")
+            .or_else(|| msg.get("reasoning_content"))
+            .and_then(Value::as_str)
+            .map(str::len)
+            .unwrap_or(0);
+        return Err(format!(
+            "empty content (reasoning={reasoning_len} chars) — model spent its budget thinking"
+        ));
+    }
+    Ok(content.to_string())
+}
+
+/// One OpenAI-compatible chat request shared by `generate` and `chat`.
+fn openai_chat(
+    c: &reqwest::blocking::Client,
+    model: &str,
+    messages: Vec<Value>,
+    json_format: bool,
+) -> Result<String, String> {
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "reasoning_effort": "none",
+    });
+    if json_format {
+        body["response_format"] = serde_json::json!({ "type": "json_object" });
+    }
+    let url = format!("{}/chat/completions", backend().base);
+    let resp = c
+        .post(&url)
+        .json(&body)
+        .send()
+        .map_err(|e| format!("send: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().map_err(|e| format!("read: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", &text[..300.min(text.len())]));
+    }
+    let v: Value = serde_json::from_str(&text).map_err(|e| format!("parse: {e}"))?;
+    openai_content(&v)
+}
+
+fn user_msg(content: &str) -> Value {
+    serde_json::json!({ "role": "user", "content": content })
+}
 const RESULTS_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/results");
 const TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -55,6 +146,9 @@ fn generate(
     prompt: &str,
     json_format: bool,
 ) -> Result<String, String> {
+    if backend().openai {
+        return openai_chat(c, model, vec![user_msg(prompt)], json_format);
+    }
     let mut body = serde_json::json!({
         "model": model,
         "prompt": prompt,
@@ -88,6 +182,13 @@ fn chat(
     model: &str,
     messages: &[(&str, &str)],
 ) -> Result<String, String> {
+    if backend().openai {
+        let msgs: Vec<Value> = messages
+            .iter()
+            .map(|(role, content)| serde_json::json!({ "role": role, "content": content }))
+            .collect();
+        return openai_chat(c, model, msgs, false);
+    }
     let msgs: Vec<Value> = messages
         .iter()
         .map(|(role, content)| {
@@ -1168,7 +1269,12 @@ pub fn run(models: &[String]) {
     let dir = std::path::Path::new(RESULTS_DIR);
     let fname = format!("eval-{}.json", stamp());
     let doc = serde_json::json!({
-        "server": OLLAMA,
+        "server": backend().base,
+        // Which transport produced these numbers. Local Ollama runs form the
+        // ratchet; an `openai` row came from a remote endpoint and must not be
+        // compared against them as if it were the same setup (different
+        // hardware, quantization and contention).
+        "backend": if backend().openai { "openai" } else { "ollama-native" },
         "stamp": fname,
         "base_tasks": results[0].1.iter().map(|(t, _)| t.name).collect::<Vec<_>>(),
         "hard_tasks": results[0].2.iter().map(|(t, _)| t.name).collect::<Vec<_>>(),

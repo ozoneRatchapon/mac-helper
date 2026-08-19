@@ -1,0 +1,112 @@
+{
+ "server": "http://127.0.0.1:11434",
+ "stamp": "eval-20260819_162116.json",
+ "base_tasks": [
+  "rust_codegen",
+  "json_unassisted",
+  "json_format",
+  "arithmetic",
+  "tool_call",
+  "needle",
+  "multi_turn"
+ ],
+ "hard_tasks": [
+  "arith_words",
+  "codegen_strict",
+  "json_deep",
+  "tool_choice",
+  "needle_deep",
+  "multi_turn_update"
+ ],
+ "models": [
+  {
+   "model": "Qwen/Qwen3.8-27B",
+   "base": 1.0,
+   "hard": 0.9166666666666666,
+   "overall": 0.9615384615384616,
+   "total_elapsed_ms": 1211876,
+   "tasks": [
+    {
+     "name": "rust_codegen",
+     "score": 1.0,
+     "detail": "compiles, output contains 2550 (stdout=\"2550\")",
+     "elapsed_ms": 103782
+    },
+    {
+     "name": "json_unassisted",
+     "score": 1.0,
+     "detail": "schema satisfied",
+     "elapsed_ms": 13302
+    },
+    {
+     "name": "json_format",
+     "score": 1.0,
+     "detail": "schema satisfied",
+     "elapsed_ms": 1535
+    },
+    {
+     "name": "arithmetic",
+     "score": 1.0,
+     "detail": "\"What is 47 + 38 * 2? Answer with only the number.\" -> correct (123); \"A farmer has 6 fields. Each field has 9 rows. Each row has 5 plants. How many plants are there in total? Answer with only the number.\" -> correct (270)",
+     "elapsed_ms": 228556
+    },
+    {
+     "name": "tool_call",
+     "score": 1.0,
+     "detail": "correct tool call",
+     "elapsed_ms": 36511
+    },
+    {
+     "name": "needle",
+     "score": 1.0,
+     "detail": "recalled ZEPHYR-9271",
+     "elapsed_ms": 3480
+    },
+    {
+     "name": "multi_turn",
+     "score": 1.0,
+     "detail": "remembered 74",
+     "elapsed_ms": 159643
+    },
+    {
+     "name": "arith_words",
+     "score": 0.5,
+     "detail": "\"A bakery has 13 crates, each holding 90 eggs. 250 eggs are broken and discarded. The remaining good eggs are split equally into 2 bins. How many eggs are in one bin? Answer with only the number.\" -> expected 460, got \"4325\"; \"A shop sold 40 loaves of bread on Monday, 55 loaves on Tuesday, and 110 loaves on Wednesday. It also had 50 loaves left in storage at the end of the week, which it did not sell. How many loaves did it sell in total over those three days? Answer with only the number.\" -> correct (205)",
+     "elapsed_ms": 125568
+    },
+    {
+     "name": "codegen_strict",
+     "score": 1.0,
+     "detail": "stdin=\"1,-2,3,-4\" -> \"20\" ok; stdin=\"5,7,9\" -> \"none\" ok; stdin=\"-3,10,-1\" -> \"10\" ok",
+     "elapsed_ms": 4658
+    },
+    {
+     "name": "json_deep",
+     "score": 1.0,
+     "detail": "name ok; version(semver) ok; date(ISO) ok; yanked(bool) ok; changes=2 objects ok; items type+summary(3-10 words) ok",
+     "elapsed_ms": 38934
+    },
+    {
+     "name": "tool_choice",
+     "score": 1.0,
+     "detail": "tool (want send_email, got send_email) ok; to (got \"maria@example.com\") ok; payload (got \"see you at 5\") ok",
+     "elapsed_ms": 184657
+    },
+    {
+     "name": "needle_deep",
+     "score": 1.0,
+     "detail": "recalled ATLAS-4815",
+     "elapsed_ms": 65723
+    },
+    {
+     "name": "multi_turn_update",
+     "score": 1.0,
+     "detail": "updated to 96, dropped 74",
+     "elapsed_ms": 245527
+    }
+   ]
+  }
+ ],
+ "backend": "openai",
+ "note": "hosted Qwen/Qwen3.8-27B BF16, free community endpoint (H200/vLLM)"
+}
